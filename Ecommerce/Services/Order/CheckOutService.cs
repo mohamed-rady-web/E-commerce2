@@ -1,4 +1,5 @@
-﻿using Ecommerce.Data;
+﻿using AutoMapper;
+using Ecommerce.Data;
 using Ecommerce.Dtos.CheckOut;
 using Ecommerce.Dtos.Orders;
 using Ecommerce.Models.Order;
@@ -9,9 +10,12 @@ namespace Ecommerce.Services.Order
     public class CheckOutService : ICheckOutService
     {
         private readonly ApplicationDbContext _context;
-        public CheckOutService(ApplicationDbContext context)
+        private readonly IMapper _mapper;
+
+        public CheckOutService(ApplicationDbContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
 
         public async Task<CheckOutDto> CancelOrderAsync(int CheckOutId)
@@ -21,26 +25,18 @@ namespace Ecommerce.Services.Order
                 var exitingOrder = await _context.CheckOuts.FirstOrDefaultAsync(c => c.Id == CheckOutId);
                 if (exitingOrder is null)
                 {
-                    return new CheckOutDto
-                    {
-                        Message = "the order isnt found or it didnt cheacked out"
-                    };
+                    return new CheckOutDto { Message = "the order isnt found or it didnt cheacked out" };
                 }
+
                 exitingOrder.Orders.Clear();
                 _context.CheckOuts.Remove(exitingOrder);
                 await _context.SaveChangesAsync();
-                return new CheckOutDto
-                {
-                    Message = "Order Deleted"
-                };
 
+                return new CheckOutDto { Message = "Order Deleted" };
             }
             catch (Exception ex)
             {
-                return new CheckOutDto
-                {
-                    Message = ex.Message,
-                };
+                return new CheckOutDto { Message = ex.Message };
             }
         }
 
@@ -48,35 +44,36 @@ namespace Ecommerce.Services.Order
         {
             try
             {
-                var exitingOrder = await _context.CheckOuts.Include(c => c.Orders).FirstOrDefaultAsync(m => m.Id == CheckOutId);
+                var exitingOrder = await _context.CheckOuts
+                    .Include(c => c.Orders)
+                    .FirstOrDefaultAsync(m => m.Id == CheckOutId);
+
                 if (exitingOrder is null)
                 {
-                    return new CheckOutDto
-                    {
-                        Message = "order Not found or didnt checked out "
-                    };
+                    return new CheckOutDto { Message = "order Not found or didnt checked out " };
                 }
-                var order = await _context.Orders.Where(c=>c.CheckOutId==CheckOutId).FirstOrDefaultAsync(m => m.Id == CheckOutId);
-                if (order is null) { return new CheckOutDto { Message = "Order not found " }; }
-                if (order.Status == exitingOrder.Status) { return new CheckOutDto { Message = "Payment has confirmed already" }; }
-                order.Status=newstatus;
-                exitingOrder.Status=newstatus;
-                await _context.SaveChangesAsync();
-                return new CheckOutDto
-                {
-                    Id = exitingOrder.Id,
-                    UserId = exitingOrder.UserId,
-                    Message = "Payment Confirmed",
-                    Status = newstatus
 
-                };
+                var order = await _context.Orders
+                    .Where(c => c.CheckOutId == CheckOutId)
+                    .FirstOrDefaultAsync(m => m.Id == CheckOutId);
+
+                if (order is null) return new CheckOutDto { Message = "Order not found " };
+                if (order.Status == exitingOrder.Status) return new CheckOutDto { Message = "Payment has confirmed already" };
+
+                order.Status = newstatus;
+                exitingOrder.Status = newstatus;
+
+                await _context.SaveChangesAsync();
+
+                var dto = _mapper.Map<CheckOutDto>(exitingOrder);
+                dto.Message = "Payment Confirmed";
+                dto.Status = newstatus;
+
+                return dto;
             }
             catch (Exception ex)
             {
-                return new CheckOutDto
-                {
-                    Message = ex.Message
-                };
+                return new CheckOutDto { Message = ex.Message };
             }
         }
 
@@ -90,47 +87,13 @@ namespace Ecommerce.Services.Order
                         .ThenInclude(o => o.Items)
                     .ToListAsync();
 
-                return checkouts.Select(c => new CheckOutDto
-                {
-                    Id = c.Id,
-                    UserId = c.UserId,
-                    FirstName = c.User?.FirstName,
-                    LastName = c.User?.LastName,
-                    ShippingAddress = c.ShippingAddress,
-                    BillingAddress = c.BillingAddress,
-                    PaymentMethod = c.PaymentMethod,
-                    TotalAmount = c.TotalAmount,
-                    CheckOutDate = c.CheckOutDate,
-                    Orders = c.Orders.Select(o => new OrderDto
-                    {
-                        Id = o.Id,
-                        UserId = o.UserId,
-                        TotalPrice = o.TotalPrice,
-                        OrderDate = o.OrderDate,
-                        Status = o.Status,
-                        Items = o.Items.Select(i => new OrderItemDto
-                        {
-                            Id = i.Id,
-                            Quantity = i.Quantity,
-                            Price = i.Price,
-                            OrderId = i.OrderId,
-                            CartItemId = i.CartItemId
-                        }).ToList()
-                    }).ToList()
-                }).ToList();
+                return _mapper.Map<List<CheckOutDto>>(checkouts);
             }
             catch (Exception ex)
             {
-                return new List<CheckOutDto>
-                {
-                    new CheckOutDto
-                    {
-                        Message = $"Error: {ex.Message}"
-                    }
-                };
+                return new List<CheckOutDto> { new CheckOutDto { Message = $"Error: {ex.Message}" } };
             }
         }
-
 
         public async Task<CheckOutDto> GetCheckOutDetailsAsync(int checkOutId)
         {
@@ -144,51 +107,18 @@ namespace Ecommerce.Services.Order
 
                 if (checkout == null)
                 {
-                    return new CheckOutDto
-                    {
-                        Message = $"Checkout with ID {checkOutId} not found"
-                    };
+                    return new CheckOutDto { Message = $"Checkout with ID {checkOutId} not found" };
                 }
 
-                return new CheckOutDto
-                {
-                    Id = checkout.Id,
-                    UserId = checkout.UserId,
-                    FirstName = checkout.User?.FirstName,
-                    LastName = checkout.User?.LastName,
-                    ShippingAddress = checkout.ShippingAddress,
-                    BillingAddress = checkout.BillingAddress,
-                    PaymentMethod = checkout.PaymentMethod,
-                    TotalAmount = checkout.TotalAmount,
-                    CheckOutDate = checkout.CheckOutDate,
-                    Orders = checkout.Orders.Select(o => new OrderDto
-                    {
-                        Id = o.Id,
-                        UserId = o.UserId,
-                        TotalPrice = o.TotalPrice,
-                        OrderDate = o.OrderDate,
-                        Status = o.Status,
-                        Items = o.Items.Select(i => new OrderItemDto
-                        {
-                            Id = i.Id,
-                            Quantity = i.Quantity,
-                            Price = i.Price,
-                            OrderId = i.OrderId,
-                            CartItemId = i.CartItemId
-                        }).ToList()
-                    }).ToList(),
-                    Message = "Checkout retrieved successfully"
-                };
+                var dto = _mapper.Map<CheckOutDto>(checkout);
+                dto.Message = "Checkout retrieved successfully";
+                return dto;
             }
             catch (Exception ex)
             {
-                return new CheckOutDto
-                {
-                    Message = $"Error retrieving checkout: {ex.Message}"
-                };
+                return new CheckOutDto { Message = $"Error retrieving checkout: {ex.Message}" };
             }
         }
-
 
         public async Task<List<CheckOutDto>> GetUserCheckOutOrdersAsync(string userId)
         {
@@ -203,57 +133,19 @@ namespace Ecommerce.Services.Order
 
                 if (!checkouts.Any())
                 {
-                    return new List<CheckOutDto>
-            {
-                new CheckOutDto
-                {
-                    Message = $"No checkouts found for user {userId}"
-                }
-            };
+                    return new List<CheckOutDto> { new CheckOutDto { Message = $"No checkouts found for user {userId}" } };
                 }
 
-                return checkouts.Select(c => new CheckOutDto
-                {
-                    Id = c.Id,
-                    UserId = c.UserId,
-                    FirstName = c.User?.FirstName,
-                    LastName = c.User?.LastName,
-                    ShippingAddress = c.ShippingAddress,
-                    BillingAddress = c.BillingAddress,
-                    PaymentMethod = c.PaymentMethod,
-                    TotalAmount = c.TotalAmount,
-                    CheckOutDate = c.CheckOutDate,
-                    Orders = c.Orders.Select(o => new OrderDto
-                    {
-                        Id = o.Id,
-                        UserId = o.UserId,
-                        TotalPrice = o.TotalPrice,
-                        OrderDate = o.OrderDate,
-                        Status = o.Status,
-                        Items = o.Items.Select(i => new OrderItemDto
-                        {
-                            Id = i.Id,
-                            Quantity = i.Quantity,
-                            Price = i.Price,
-                            OrderId = i.OrderId,
-                            CartItemId = i.CartItemId
-                        }).ToList()
-                    }).ToList(),
-                    Message = "Checkout retrieved successfully"
-                }).ToList();
+                var result = _mapper.Map<List<CheckOutDto>>(checkouts);
+                result.ForEach(c => c.Message = "Checkout retrieved successfully");
+
+                return result;
             }
             catch (Exception ex)
             {
-                return new List<CheckOutDto>
-        {
-            new CheckOutDto
-            {
-                Message = $"Error retrieving user checkouts: {ex.Message}"
-            }
-        };
+                return new List<CheckOutDto> { new CheckOutDto { Message = $"Error retrieving user checkouts: {ex.Message}" } };
             }
         }
-
 
         public async Task<CheckOutDto> ProcessCheckOutAsync(StartCheckOutDto dto)
         {
@@ -261,26 +153,16 @@ namespace Ecommerce.Services.Order
 
             try
             {
-                // 1️⃣ Save customer info first
-                var checkout = new CheckOutModel
-                {
-                    UserId = dto.UserId,
-                    ShippingAddress = dto.ShippingAddress,
-                    BillingAddress = dto.BillingAddress,
-                    PaymentMethod = dto.PaymentMethod,
-                    TotalAmount = dto.TotalAmount,
-                    CheckOutDate = DateTime.UtcNow
-                };
+                var checkout = _mapper.Map<CheckOutModel>(dto);
+                checkout.CheckOutDate = DateTime.UtcNow;
 
                 await _context.CheckOuts.AddAsync(checkout);
                 await _context.SaveChangesAsync();
 
-                // ✅ Create savepoint here
                 await transaction.CreateSavepointAsync("SaveCustomerInfo");
 
                 try
                 {
-                    // 2️⃣ Create order
                     var order = new OrderModel
                     {
                         UserId = dto.UserId,
@@ -293,7 +175,6 @@ namespace Ecommerce.Services.Order
                     await _context.Orders.AddAsync(order);
                     await _context.SaveChangesAsync();
 
-                    // 3️⃣ Cart items with stock check
                     var cartItems = await _context.CartItems
                         .Include(c => c.Product)
                         .Where(c => c.Cart.UserId == dto.UserId)
@@ -302,8 +183,7 @@ namespace Ecommerce.Services.Order
                     foreach (var cartItem in cartItems)
                     {
                         if (cartItem.Product.Stock < cartItem.Quantity)
-                            throw new InvalidOperationException(
-                                $"Not enough stock for product {cartItem.Product.Name}");
+                            throw new InvalidOperationException($"Not enough stock for product {cartItem.Product.Name}");
 
                         cartItem.Product.Stock -= cartItem.Quantity;
 
@@ -320,44 +200,25 @@ namespace Ecommerce.Services.Order
 
                     await _context.SaveChangesAsync();
 
-                    // 4️⃣ Clear cart
                     _context.CartItems.RemoveRange(cartItems);
                     await _context.SaveChangesAsync();
 
-                    // ✅ Commit if everything succeeded
                     await transaction.CommitAsync();
                 }
                 catch (Exception ex)
                 {
-                    // ❌ Rollback order/items/stock, but keep checkout
                     await transaction.RollbackToSavepointAsync("SaveCustomerInfo");
                     await transaction.CommitAsync();
 
-                    return new CheckOutDto
-                    {
-                        Id = checkout.Id,
-                        UserId = checkout.UserId,
-                        ShippingAddress = checkout.ShippingAddress,
-                        BillingAddress = checkout.BillingAddress,
-                        PaymentMethod = checkout.PaymentMethod,
-                        TotalAmount = checkout.TotalAmount,
-                        CheckOutDate = checkout.CheckOutDate,
-                        Message = $"Checkout saved but order failed: {ex.Message}"
-                    };
+                    var partial = _mapper.Map<CheckOutDto>(checkout);
+                    partial.Message = $"Checkout saved but order failed: {ex.Message}";
+
+                    return partial;
                 }
 
-                // ✅ Full success response
-                return new CheckOutDto
-                {
-                    Id = checkout.Id,
-                    UserId = checkout.UserId,
-                    ShippingAddress = checkout.ShippingAddress,
-                    BillingAddress = checkout.BillingAddress,
-                    PaymentMethod = checkout.PaymentMethod,
-                    TotalAmount = checkout.TotalAmount,
-                    CheckOutDate = checkout.CheckOutDate,
-                    Message = "Checkout and order completed successfully"
-                };
+                var result = _mapper.Map<CheckOutDto>(checkout);
+                result.Message = "Checkout and order completed successfully";
+                return result;
             }
             catch (Exception ex)
             {
@@ -365,6 +226,5 @@ namespace Ecommerce.Services.Order
                 throw new Exception($"Checkout process failed completely: {ex.Message}");
             }
         }
-
     }
 }
