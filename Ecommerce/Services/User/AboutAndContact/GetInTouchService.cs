@@ -1,4 +1,5 @@
-﻿using Ecommerce.Data;
+﻿using AutoMapper;
+using Ecommerce.Data;
 using Ecommerce.Dtos.User.GetInTouch_About;
 using Ecommerce.Models.User.AboutAndContact;
 using Microsoft.EntityFrameworkCore;
@@ -8,39 +9,25 @@ namespace Ecommerce.Services.User.AboutAndContact
     public class GetInTouchService : IGetInTouchService
     {
         private readonly ApplicationDbContext _context;
+        private readonly IMapper _mapper;
 
-        public GetInTouchService(ApplicationDbContext context)
+        public GetInTouchService(ApplicationDbContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
 
         public async Task<GetInTouchDto> SendMessageAsync(SendMessageDto dto)
         {
             try
             {
-                var message = new GetinTouchModel
-                {
-                    FirstName = dto.FirstName,
-                    LastName = dto.LastName,
-                    Email = dto.Email,
-                    Subject = dto.Subject,
-                    Message = dto.Message,
-                    replied = false
-                };
+                var message = _mapper.Map<GetinTouchModel>(dto);
+                message.replied = false;
 
                 _context.ContactUs.Add(message);
                 await _context.SaveChangesAsync();
 
-                return new GetInTouchDto
-                {
-                    Id = message.Id,
-                    FirstName = message.FirstName,
-                    LastName = message.LastName,
-                    Email = message.Email,
-                    Subject = message.Subject,
-                    Message = message.Message,
-                    replied = message.replied
-                };
+                return _mapper.Map<GetInTouchDto>(message);
             }
             catch (Exception ex)
             {
@@ -56,16 +43,7 @@ namespace Ecommerce.Services.User.AboutAndContact
                     .OrderByDescending(m => m.Id)
                     .ToListAsync();
 
-                return messages.Select(m => new GetInTouchDto
-                {
-                    Id = m.Id,
-                    FirstName = m.FirstName,
-                    LastName = m.LastName,
-                    Email = m.Email,
-                    Subject = m.Subject,
-                    Message = m.Message,
-                    replied = m.replied
-                }).ToList();
+                return _mapper.Map<List<GetInTouchDto>>(messages);
             }
             catch (Exception ex)
             {
@@ -83,16 +61,7 @@ namespace Ecommerce.Services.User.AboutAndContact
                 if (message == null)
                     throw new Exception("Message not found.");
 
-                return new GetInTouchDto
-                {
-                    Id = message.Id,
-                    FirstName = message.FirstName,
-                    LastName = message.LastName,
-                    Email = message.Email,
-                    Subject = message.Subject,
-                    Message = message.Message,
-                    replied = message.replied
-                };
+                return _mapper.Map<GetInTouchDto>(message);
             }
             catch (Exception ex)
             {
@@ -113,16 +82,7 @@ namespace Ecommerce.Services.User.AboutAndContact
                 _context.ContactUs.Remove(message);
                 await _context.SaveChangesAsync();
 
-                return new GetInTouchDto
-                {
-                    Id = message.Id,
-                    FirstName = message.FirstName,
-                    LastName = message.LastName,
-                    Email = message.Email,
-                    Subject = message.Subject,
-                    Message = message.Message,
-                    replied = message.replied
-                };
+                return _mapper.Map<GetInTouchDto>(message);
             }
             catch (Exception ex)
             {

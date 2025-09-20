@@ -1,6 +1,6 @@
-﻿using Ecommerce.Data;
+﻿using AutoMapper;
+using Ecommerce.Data;
 using Ecommerce.Dtos.User.Reviews;
-using Ecommerce.Models.Product;
 using Ecommerce.Models.User;
 using Ecommerce.Models.User.AboutAndContact;
 using Microsoft.EntityFrameworkCore;
@@ -10,42 +10,30 @@ namespace Ecommerce.Services.User.AboutAndContact
     public class ReviewsService : IReviewService
     {
         private readonly ApplicationDbContext _context;
+        private readonly IMapper _mapper;
 
-        public ReviewsService(ApplicationDbContext context)
+        public ReviewsService(ApplicationDbContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
 
         public async Task<ReviewsDto> AddReviewAsync(AddReviewDto dto)
         {
             try
             {
-                var review = new ReviewsModel
-                {
-                    UserId = dto.UserId,
-                    Rating = dto.Rating,
-                    Comment = dto.Comment,
-                    ReviewDate = dto.ReviewDate,
-                    ProductId = dto.ProductId
-                };
+                var review = _mapper.Map<ReviewsModel>(dto);
 
                 _context.Reviews.Add(review);
                 await _context.SaveChangesAsync();
 
-                var user = await _context.Users.FindAsync(dto.UserId);
-                var product = await _context.Products.FindAsync(dto.ProductId);
+                // fetch related entities for Email & Productname
+                var reviewWithIncludes = await _context.Reviews
+                    .Include(r => r.User)
+                    .Include(r => r.Product)
+                    .FirstOrDefaultAsync(r => r.Id == review.Id);
 
-                return new ReviewsDto
-                {
-                    Id = review.Id,
-                    UserId = review.UserId,
-                    Email = user?.Email,
-                    Rating = review.Rating,
-                    Comment = review.Comment,
-                    ReviewDate = review.ReviewDate,
-                    ProductId = review.ProductId,
-                    Productname = product?.Name
-                };
+                return _mapper.Map<ReviewsDto>(reviewWithIncludes);
             }
             catch (Exception ex)
             {
@@ -57,22 +45,13 @@ namespace Ecommerce.Services.User.AboutAndContact
         {
             try
             {
-                return await _context.Reviews
+                var reviews = await _context.Reviews
                     .Include(r => r.User)
                     .Include(r => r.Product)
                     .OrderByDescending(r => r.ReviewDate)
-                    .Select(r => new ReviewsDto
-                    {
-                        Id = r.Id,
-                        UserId = r.UserId,
-                        Email = r.User.Email,
-                        Rating = r.Rating,
-                        Comment = r.Comment,
-                        ReviewDate = r.ReviewDate,
-                        ProductId = r.ProductId,
-                        Productname = r.Product.Name
-                    })
                     .ToListAsync();
+
+                return _mapper.Map<List<ReviewsDto>>(reviews);
             }
             catch (Exception ex)
             {
@@ -84,23 +63,14 @@ namespace Ecommerce.Services.User.AboutAndContact
         {
             try
             {
-                return await _context.Reviews
+                var reviews = await _context.Reviews
                     .Include(r => r.User)
                     .Include(r => r.Product)
                     .Where(r => r.ProductId == productId)
                     .OrderByDescending(r => r.ReviewDate)
-                    .Select(r => new ReviewsDto
-                    {
-                        Id = r.Id,
-                        UserId = r.UserId,
-                        Email = r.User.Email,
-                        Rating = r.Rating,
-                        Comment = r.Comment,
-                        ReviewDate = r.ReviewDate,
-                        ProductId = r.ProductId,
-                        Productname = r.Product.Name
-                    })
                     .ToListAsync();
+
+                return _mapper.Map<List<ReviewsDto>>(reviews);
             }
             catch (Exception ex)
             {
@@ -126,25 +96,16 @@ namespace Ecommerce.Services.User.AboutAndContact
         {
             try
             {
-                return await _context.Reviews
+                var reviews = await _context.Reviews
                     .Include(r => r.User)
                     .Include(r => r.Product)
                     .Where(r => r.ProductId == productId)
                     .OrderByDescending(r => r.Rating)
                     .ThenByDescending(r => r.ReviewDate)
                     .Take(3)
-                    .Select(r => new ReviewsDto
-                    {
-                        Id = r.Id,
-                        UserId = r.UserId,
-                        Email = r.User.Email,
-                        Rating = r.Rating,
-                        Comment = r.Comment,
-                        ReviewDate = r.ReviewDate,
-                        ProductId = r.ProductId,
-                        Productname = r.Product.Name
-                    })
                     .ToListAsync();
+
+                return _mapper.Map<List<ReviewsDto>>(reviews);
             }
             catch (Exception ex)
             {
@@ -156,23 +117,14 @@ namespace Ecommerce.Services.User.AboutAndContact
         {
             try
             {
-                return await _context.Reviews
+                var reviews = await _context.Reviews
                     .Include(r => r.User)
                     .Include(r => r.Product)
                     .Where(r => r.UserId == userId)
                     .OrderByDescending(r => r.ReviewDate)
-                    .Select(r => new ReviewsDto
-                    {
-                        Id = r.Id,
-                        UserId = r.UserId,
-                        Email = r.User.Email,
-                        Rating = r.Rating,
-                        Comment = r.Comment,
-                        ReviewDate = r.ReviewDate,
-                        ProductId = r.ProductId,
-                        Productname = r.Product.Name
-                    })
                     .ToListAsync();
+
+                return _mapper.Map<List<ReviewsDto>>(reviews);
             }
             catch (Exception ex)
             {
@@ -213,24 +165,13 @@ namespace Ecommerce.Services.User.AboutAndContact
                 if (review == null)
                     throw new Exception("Review not found or not authorized.");
 
-                review.Rating = dto.Rating;
-                review.Comment = dto.Comment;
+                _mapper.Map(dto, review);
                 review.ReviewDate = DateTime.UtcNow;
 
                 _context.Reviews.Update(review);
                 await _context.SaveChangesAsync();
 
-                return new ReviewsDto
-                {
-                    Id = review.Id,
-                    UserId = review.UserId,
-                    Email = review.User.Email,
-                    Rating = review.Rating,
-                    Comment = review.Comment,
-                    ReviewDate = review.ReviewDate,
-                    ProductId = review.ProductId,
-                    Productname = review.Product.Name
-                };
+                return _mapper.Map<ReviewsDto>(review);
             }
             catch (Exception ex)
             {

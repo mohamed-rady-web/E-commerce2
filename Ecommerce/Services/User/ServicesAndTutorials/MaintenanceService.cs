@@ -1,25 +1,29 @@
-﻿using Ecommerce.Data;
+﻿using AutoMapper;
+using Ecommerce.Data;
 using Ecommerce.Dtos.User.TutorialsAndMaintenance;
 using Ecommerce.Models.User.ServicesAndTutorials;
 using Microsoft.EntityFrameworkCore;
-using System.Reflection;
 
 namespace Ecommerce.Services.User.ServicesAndTutorials
 {
     public class MaintenanceService : IMaintenanceService
     {
         private readonly ApplicationDbContext _context;
+        private readonly IMapper _mapper;
 
-        public MaintenanceService(ApplicationDbContext context)
+        public MaintenanceService(ApplicationDbContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
 
         public async Task<MaintenanceServiceDto> AddServiceAsync(AddMaintenanceDto dto)
         {
             try
             {
-                var existingService = _context.MaintenanceServices.FirstOrDefaultAsync(s => s.ServiceName.ToLower() == dto.ServiceName.ToLower());
+                var existingService = await _context.MaintenanceServices
+                    .FirstOrDefaultAsync(s => s.ServiceName.ToLower() == dto.ServiceName.ToLower());
+
                 if (existingService != null)
                 {
                     return new MaintenanceServiceDto
@@ -27,24 +31,14 @@ namespace Ecommerce.Services.User.ServicesAndTutorials
                         Message = "A service with the same name already exists."
                     };
                 }
-                var newService = new MaintenanceServicesModel
-                {
-                    ServiceName = dto.ServiceName,
-                    Description = dto.Description,
-                    Price = dto.Price,
-                    ImageUrl = dto.ImageUrl
-                };
+
+                var newService = _mapper.Map<MaintenanceServicesModel>(dto);
                 _context.MaintenanceServices.Add(newService);
                 await _context.SaveChangesAsync();
-                return new MaintenanceServiceDto
-                {
-                    Id = newService.Id,
-                    ServiceName = newService.ServiceName,
-                    Description = newService.Description,
-                    Price = newService.Price,
-                    ImageUrl = newService.ImageUrl,
-                    Message = "Service added successfully."
-                };
+
+                var result = _mapper.Map<MaintenanceServiceDto>(newService);
+                result.Message = "Service added successfully.";
+                return result;
             }
             catch (Exception ex)
             {
@@ -60,21 +54,17 @@ namespace Ecommerce.Services.User.ServicesAndTutorials
             try
             {
                 var exitingService = await _context.MaintenanceServices.FirstOrDefaultAsync(s => s.Id == serviceId);
-                if(exitingService is null)
+                if (exitingService is null)
                 {
-                    return new MaintenanceServiceDto
-                    {
-                        Message = "Service not found."
-                    };
+                    return new MaintenanceServiceDto { Message = "Service not found." };
                 }
+
                 _context.MaintenanceServices.Remove(exitingService);
                 await _context.SaveChangesAsync();
-                return new MaintenanceServiceDto {
-                    Message = "Service deleted successfully."
-                };
 
+                return new MaintenanceServiceDto { Message = "Service deleted successfully." };
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 return new MaintenanceServiceDto
                 {
@@ -87,19 +77,13 @@ namespace Ecommerce.Services.User.ServicesAndTutorials
         {
             try
             {
-               var Services=await _context.MaintenanceServices.ToListAsync();
-                return new List<MaintenanceServiceDto>(Services.Select(service => new MaintenanceServiceDto
-                {
-                    Message="Services retrieved successfully.",
-                    Id = service.Id,
-                    ServiceName = service.ServiceName,
-                    Description = service.Description,
-                    Price = service.Price,
-                    ImageUrl = service.ImageUrl
-                }));
+                var services = await _context.MaintenanceServices
+                    .Include(s => s.Tutorial)
+                    .ToListAsync();
 
+                return _mapper.Map<List<MaintenanceServiceDto>>(services);
             }
-            catch(Exception ex)
+            catch
             {
                 return new List<MaintenanceServiceDto>();
             }
@@ -109,26 +93,20 @@ namespace Ecommerce.Services.User.ServicesAndTutorials
         {
             try
             {
-                var exitingService=await _context.MaintenanceServices.FirstOrDefaultAsync(s=>s.Id==serviceId);
-                if(exitingService is null)
-                {
-                    return new MaintenanceServiceDto
-                    {
-                        Message = "Service not found."
-                    };
-                }
-                return new MaintenanceServiceDto
-                {
-                    Message = "Service retrieved successfully.",
-                    Id = exitingService.Id,
-                    ServiceName = exitingService.ServiceName,
-                    Description = exitingService.Description,
-                    Price = exitingService.Price,
-                    ImageUrl = exitingService.ImageUrl
-                };
+                var exitingService = await _context.MaintenanceServices
+                    .Include(s => s.Tutorial)
+                    .FirstOrDefaultAsync(s => s.Id == serviceId);
 
+                if (exitingService is null)
+                {
+                    return new MaintenanceServiceDto { Message = "Service not found." };
+                }
+
+                var result = _mapper.Map<MaintenanceServiceDto>(exitingService);
+                result.Message = "Service retrieved successfully.";
+                return result;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 return new MaintenanceServiceDto
                 {
@@ -141,26 +119,18 @@ namespace Ecommerce.Services.User.ServicesAndTutorials
         {
             try
             {
-                var exitingService = await _context.MaintenanceServices.FirstOrDefaultAsync(m => m.ServiceName.ToLower() == name);
-                    if (exitingService is null)
-                {
-                    return new MaintenanceServiceDto
-                    {
-                        Message = "ServiceName not found"
+                var exitingService = await _context.MaintenanceServices
+                    .Include(s => s.Tutorial)
+                    .FirstOrDefaultAsync(m => m.ServiceName.ToLower() == name.ToLower());
 
-                    };
+                if (exitingService is null)
+                {
+                    return new MaintenanceServiceDto { Message = "ServiceName not found" };
                 }
-                return new MaintenanceServiceDto
-                {
-                    Id = exitingService.Id,
-                    ServiceName = exitingService.ServiceName,
-                    Description = exitingService.Description,
-                    Price = exitingService.Price,
-                    ImageUrl = exitingService.ImageUrl
-                };
 
-
-            } catch (Exception ex)
+                return _mapper.Map<MaintenanceServiceDto>(exitingService);
+            }
+            catch (Exception ex)
             {
                 return new MaintenanceServiceDto
                 {
@@ -169,58 +139,33 @@ namespace Ecommerce.Services.User.ServicesAndTutorials
             }
         }
 
-        public async Task<MaintenanceServiceDto> UpdateServiceAsync(int ServiceId,UpdateMaintenaceDto dto)
+        public async Task<MaintenanceServiceDto> UpdateServiceAsync(int ServiceId, UpdateMaintenaceDto dto)
         {
             try
             {
-                var exitingService = await _context.MaintenanceServices.FirstOrDefaultAsync(i => i.Id == ServiceId);
+                var exitingService = await _context.MaintenanceServices
+                    .Include(s => s.Tutorial)
+                    .FirstOrDefaultAsync(i => i.Id == ServiceId);
+
                 if (exitingService is null)
                 {
-                    return new MaintenanceServiceDto
-                    {
-                        Message = "Service Not Found"
-                    };
+                    return new MaintenanceServiceDto { Message = "Service Not Found" };
                 }
 
-                var dtoProp = typeof(UpdateMaintenaceDto).GetProperties();
-                var ModelProp = typeof(MaintenanceServicesModel).GetProperties();
-                
-                    foreach (var prop in dtoProp)
-                    {
-                        var value = prop.GetValue(dto);
-                        if (value != null)
-                        {
-                            var entityProp = ModelProp.FirstOrDefault(p => p.Name == prop.Name);
-                            entityProp?.SetValue(exitingService, value);
-                        }
-                    }
+                // Update only non-null fields
+                _mapper.Map(dto, exitingService);
 
-                
                 await _context.SaveChangesAsync();
-                return new MaintenanceServiceDto
-                {
-                    Id=exitingService.Id,
-                    Message="Service Updated Successfully",
-                    ServiceName=exitingService.ServiceName,
-                    Description=exitingService.Description,
-                    Price=exitingService.Price,
-                    ImageUrl=exitingService.ImageUrl,
-                    Tutorial=exitingService.Tutorial is not null ? new TutorialsDto
-                    {
-                        Id = exitingService.Tutorial.Id,
-                        Title = exitingService.Tutorial.Title,
-                        Description = exitingService.Tutorial.Description,
-                        coverImageUrl = exitingService.Tutorial.coverImageUrl,
-                        PublishedDate = exitingService.Tutorial.PublishedDate
-                    } : null
 
-                };
+                var result = _mapper.Map<MaintenanceServiceDto>(exitingService);
+                result.Message = "Service Updated Successfully";
+                return result;
             }
             catch (Exception ex)
             {
                 return new MaintenanceServiceDto
                 {
-                    Message = $" Message = $\"An error occurred while retrieving the service: {ex.Message}\""
+                    Message = $"An error occurred while updating the service: {ex.Message}"
                 };
             }
         }

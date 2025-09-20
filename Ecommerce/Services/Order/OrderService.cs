@@ -1,4 +1,5 @@
-﻿using Ecommerce.Data;
+﻿using AutoMapper;
+using Ecommerce.Data;
 using Ecommerce.Dtos.Cart;
 using Ecommerce.Dtos.Orders;
 using Ecommerce.Models.Order;
@@ -12,59 +13,32 @@ namespace Ecommerce.Services.Order
     {
         private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly IMapper _mapper;
 
-        public OrderService(UserManager<ApplicationUser> userManager, ApplicationDbContext context)
+        public OrderService(UserManager<ApplicationUser> userManager, ApplicationDbContext context, IMapper mapper)
         {
             _userManager = userManager;
             _context = context;
+            _mapper = mapper;
         }
 
         public async Task<OrderDto> CreateOrderAsync(string userId, CreateOrderDto dto)
         {
             try
             {
-                var order = new OrderModel
-                {
-                    UserId = userId,
-                    OrderDate = DateTime.UtcNow,
-                    Status = "Pending",
-                    Items = new List<OrderItemModel>()
-                };
-
-                foreach (var item in dto.Items)
-                {
-                    order.Items.Add(new OrderItemModel
-                    {
-                        CartItemId = item.CartItemId,
-
-                        Quantity = item.Quantity,
-                        Price = item.Price
-                    });
-                }
-
+                var order = _mapper.Map<OrderModel>(dto);
+                order.UserId = userId;
+                order.OrderDate = DateTime.UtcNow;
+                order.Status = "Pending";
                 order.TotalPrice = order.Items.Sum(i => i.Quantity * i.Price);
 
-                _context.Orders.Add(order);
+                await _context.Orders.AddAsync(order);
                 await _context.SaveChangesAsync();
 
-                return new OrderDto
-                {
-                    Id = order.Id,
-                    UserId = order.UserId,
-                    OrderDate = order.OrderDate,
-                    Status = order.Status,
-                    TotalPrice = order.TotalPrice,
-                    UserName = order.User?.UserName,
-                    Items = order.Items.Select(i => new OrderItemDto
-                    {
-                        Id = i.Id,
-                        OrderId = order.Id,
-                        CartItemId = i.CartItemId,
-                        Quantity = i.Quantity,
-                        Price = i.Price
-                    }).ToList(),
-                    Message = "Order created successfully"
-                };
+                var orderDto = _mapper.Map<OrderDto>(order);
+                orderDto.Message = "Order created successfully";
+
+                return orderDto;
             }
             catch (Exception ex)
             {
@@ -104,68 +78,29 @@ namespace Ecommerce.Services.Order
                 var user = await _context.Users.FindAsync(userId);
                 var isInRole = await _userManager.IsInRoleAsync(user, "Admin");
 
+                IQueryable<OrderModel> query;
+
                 if (isInRole)
                 {
-                    var orders = _context.Orders
+                    query = _context.Orders
                         .Include(o => o.User)
                         .Include(o => o.Items)
-                        .ThenInclude(c => c.CartItem)
+                            .ThenInclude(c => c.CartItem)
                         .OrderBy(o => o.OrderDate);
-
-                    return orders.Select(o => new OrderDto
-                    {
-                        Id = o.Id,
-                        UserId = o.UserId,
-                        TotalPrice = o.TotalPrice,
-                        OrderDate = o.OrderDate,
-                        Status = o.Status,
-                        Message = "Orders retrieved successfully",
-                        Items = o.Items.Select(i => new OrderItemDto
-                        {
-                            Id = i.Id,
-                            Quantity = i.Quantity,
-                            Price = i.Price,
-                            OrderId = i.OrderId,
-                            CartItemId = i.CartItemId,
-                            CartItem = i.CartItem == null ? null : new CartItemDto
-                            {
-                                Id = i.CartItem.Id,
-                                ProductId = i.CartItem.ProductId,
-                                Quantity = i.CartItem.Quantity
-                            }
-                        }).ToList()
-                    }).ToList();
+                }
+                else
+                {
+                    query = _context.Orders
+                        .Where(u => u.UserId == userId)
+                        .Include(o => o.Items)
+                            .ThenInclude(c => c.CartItem);
                 }
 
-                var allOrders = await _context.Orders
-                    .Where(u => u.UserId == userId)
-                    .Include(o => o.Items)
-                        .ThenInclude(c => c.CartItem)
-                    .ToListAsync();
+                var orders = await query.ToListAsync();
+                var orderDtos = _mapper.Map<List<OrderDto>>(orders);
+                orderDtos.ForEach(o => o.Message = "Orders retrieved successfully");
 
-                return allOrders.Select(o => new OrderDto
-                {
-                    Id = o.Id,
-                    UserId = o.UserId,
-                    TotalPrice = o.TotalPrice,
-                    OrderDate = o.OrderDate,
-                    Status = o.Status,
-                    Message = "Orders retrieved successfully",
-                    Items = o.Items.Select(i => new OrderItemDto
-                    {
-                        Id = i.Id,
-                        Quantity = i.Quantity,
-                        Price = i.Price,
-                        OrderId = i.OrderId,
-                        CartItemId = i.CartItemId,
-                        CartItem = i.CartItem == null ? null : new CartItemDto
-                        {
-                            Id = i.CartItem.Id,
-                            ProductId = i.CartItem.ProductId,
-                            Quantity = i.CartItem.Quantity
-                        }
-                    }).ToList()
-                }).ToList();
+                return orderDtos;
             }
             catch (Exception ex)
             {
@@ -179,6 +114,7 @@ namespace Ecommerce.Services.Order
             {
                 var order = await _context.Orders
                     .Where(u => u.UserId == userId)
+                    .Include(o => o.Items)
                     .SingleOrDefaultAsync(o => o.Id == orderId);
 
                 if (order is null)
@@ -186,14 +122,7 @@ namespace Ecommerce.Services.Order
                     return new OrderDto { Message = "you are not authorized to delete this order or order not found by this ID" };
                 }
 
-                return new OrderDto
-                {
-                    Id = order.Id,
-                    UserId = userId,
-                    OrderDate = order.OrderDate,
-                    Status = order.Status,
-                    TotalPrice = order.TotalPrice
-                };
+                return _mapper.Map<OrderDto>(order);
             }
             catch (Exception ex)
             {
@@ -218,29 +147,10 @@ namespace Ecommerce.Services.Order
                         .ThenInclude(c => c.CartItem)
                     .ToListAsync();
 
-                return allOrders.Select(o => new OrderDto
-                {
-                    Id = o.Id,
-                    UserId = o.UserId,
-                    TotalPrice = o.TotalPrice,
-                    OrderDate = o.OrderDate,
-                    Status = o.Status,
-                    Message = "Orders retrieved successfully",
-                    Items = o.Items.Select(i => new OrderItemDto
-                    {
-                        Id = i.Id,
-                        Quantity = i.Quantity,
-                        Price = i.Price,
-                        OrderId = i.OrderId,
-                        CartItemId = i.CartItemId,
-                        CartItem = i.CartItem == null ? null : new CartItemDto
-                        {
-                            Id = i.CartItem.Id,
-                            ProductId = i.CartItem.ProductId,
-                            Quantity = i.CartItem.Quantity
-                        }
-                    }).ToList()
-                }).ToList();
+                var dtos = _mapper.Map<List<OrderDto>>(allOrders);
+                dtos.ForEach(o => o.Message = "Orders retrieved successfully");
+
+                return dtos;
             }
             catch (Exception ex)
             {
@@ -268,23 +178,10 @@ namespace Ecommerce.Services.Order
                 _context.Orders.Update(order);
                 await _context.SaveChangesAsync();
 
-                return new OrderDto
-                {
-                    Id = order.Id,
-                    UserId = order.UserId,
-                    TotalPrice = order.TotalPrice,
-                    OrderDate = order.OrderDate,
-                    Status = order.Status,
-                    Message = "Order updated successfully",
-                    Items = order.Items.Select(i => new OrderItemDto
-                    {
-                        Id = i.Id,
-                        Quantity = i.Quantity,
-                        Price = i.Price,
-                        OrderId = i.OrderId,
-                        CartItemId = i.CartItemId
-                    }).ToList()
-                };
+                var dtoResult = _mapper.Map<OrderDto>(order);
+                dtoResult.Message = "Order updated successfully";
+
+                return dtoResult;
             }
             catch (Exception ex)
             {
@@ -318,26 +215,10 @@ namespace Ecommerce.Services.Order
                 _context.Orders.Update(order);
                 await _context.SaveChangesAsync();
 
-                return new OrderDto
-                {
-                    Id = orderId,
-                    UserId = userId,
-                    Status = order.Status,
-                    Items = order.Items.Select(i => new OrderItemDto
-                    {
-                        Id = i.Id,
-                        Quantity = i.Quantity,
-                        Price = i.Price,
-                        OrderId = i.OrderId,
-                        CartItemId = i.CartItemId,
-                        CartItem = i.CartItem == null ? null : new CartItemDto
-                        {
-                            Id = i.CartItem.Id,
-                            ProductId = i.CartItem.ProductId,
-                            Quantity = i.CartItem.Quantity
-                        }
-                    }).ToList()
-                };
+                var dto = _mapper.Map<OrderDto>(order);
+                dto.Message = "Order status updated";
+
+                return dto;
             }
             catch (Exception ex)
             {
@@ -366,24 +247,10 @@ namespace Ecommerce.Services.Order
             _context.Orders.Update(order);
             await _context.SaveChangesAsync();
 
-            return new OrderDto
-            {
-                Id = order.Id,
-                UserId = order.UserId,
-                TotalPrice = order.TotalPrice,
-                Status = order.Status,
-                OrderDate = order.OrderDate,
-                Message = "Order item removed successfully",
-                Items = order.Items.Select(i => new OrderItemDto
-                {
-                    Id = i.Id,
-                    Quantity = i.Quantity,
-                    Price = i.Price,
-                    OrderId = i.OrderId,
-                    CartItemId = i.CartItemId
-                }).ToList()
-            };
-        }
+            var dto = _mapper.Map<OrderDto>(order);
+            dto.Message = "Order item removed successfully";
 
+            return dto;
+        }
     }
 }

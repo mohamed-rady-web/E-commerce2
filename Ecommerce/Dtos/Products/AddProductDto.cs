@@ -10,7 +10,11 @@ namespace Ecommerce.Dtos.Products
         public string Description { get; set; }
         public decimal Price { get; set; }
         [Required, DataType(DataType.ImageUrl)]
-        public string ImageUrl { get; set; }
+        public string CoverPhotoUrl { get; set; }
+        [Required, DataType(DataType.ImageUrl)]
+        public string SinglePhotoUrl { get; set; }
+        [Required, DataType(DataType.ImageUrl)]
+        public string[] ImageUrl { get; set; }
         [Required]
         public int Stock { get; set; }
         [Required]

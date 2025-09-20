@@ -1,15 +1,21 @@
-﻿using Ecommerce.Data;
+﻿using AutoMapper;
+using Ecommerce.Data;
 using Ecommerce.Dtos.User.GetInTouch_About;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ecommerce.Services.User.AboutAndContact
 {
     public class AboutService
-    {   private readonly ApplicationDbContext _context;
-        public AboutService(ApplicationDbContext context)
+    {
+        private readonly ApplicationDbContext _context;
+        private readonly IMapper _mapper;
+
+        public AboutService(ApplicationDbContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
+
         public async Task<AboutDto> GetAboutInfoAsync()
         {
             try
@@ -19,16 +25,8 @@ namespace Ecommerce.Services.User.AboutAndContact
                 {
                     throw new Exception("About information not found.");
                 }
-                return new AboutDto
-                {
-                    Id = aboutInfo.Id,
-                    CompanyName = aboutInfo.CompanyName,
-                    Mission = aboutInfo.Mission,
-                    Vision = aboutInfo.Vision,
-                    History = aboutInfo.History,
-                    Team = aboutInfo.Team,
-                    ContactInfo = aboutInfo.ContactInfo
-                };
+
+                return _mapper.Map<AboutDto>(aboutInfo);
             }
             catch (Exception ex)
             {

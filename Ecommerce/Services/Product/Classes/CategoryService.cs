@@ -1,4 +1,5 @@
-﻿using Ecommerce.Data;
+﻿using AutoMapper;
+using Ecommerce.Data;
 using Ecommerce.Dtos.Products;
 using Ecommerce.Models.Product;
 using Ecommerce.Services.Product.InterFaces;
@@ -9,45 +10,38 @@ namespace Ecommerce.Services.Product.Classes
     public class CategoryService : ICategoriesService
     {
         private readonly ApplicationDbContext _context;
+        private readonly IMapper _mapper;
 
-        public CategoryService(ApplicationDbContext context)
+        public CategoryService(ApplicationDbContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
 
         public async Task<CategoryDto> AddCategoryAsync(AddCategoryDto dto)
         {
-            try { 
-            var exitingCategory= await _context.Categories
-                .FirstOrDefaultAsync(c => c.Name.ToLower() == dto.Name.ToLower());
-            if (exitingCategory is not null)
+            try
             {
-                return new CategoryDto
+                var existingCategory = await _context.Categories
+                    .FirstOrDefaultAsync(c => c.Name.ToLower() == dto.Name.ToLower());
+
+                if (existingCategory is not null)
                 {
-                    Message = "This Category is already exist",
-                    Id = exitingCategory.Id,
-                    Name = exitingCategory.Name,
-                    Description = exitingCategory.Description,
-                    ImageUrl = exitingCategory.ImageUrl
-                };
+                    var existingDto = _mapper.Map<CategoryDto>(existingCategory);
+                    existingDto.Message = "This Category already exists";
+                    return existingDto;
+                }
+
+                var category = _mapper.Map<CategoryModel>(dto);
+
+                _context.Categories.Add(category);
+                await _context.SaveChangesAsync();
+
+                var categoryDto = _mapper.Map<CategoryDto>(category);
+                categoryDto.Message = "Category added successfully";
+                return categoryDto;
             }
-                var category = new CategoryModel
-                {
-                    Name = dto.Name,
-                    Description = dto.Description,
-                    ImageUrl = dto.ImageUrl
-                };
-            _context.Categories.Add(category);
-            await _context.SaveChangesAsync();
-            return new CategoryDto
-            {
-                Message = "Category added successfully",
-                Id = category.Id,
-                Name = category.Name,
-                Description = category.Description,
-                ImageUrl = category.ImageUrl
-            };
-        }catch(Exception ex)
+            catch (Exception ex)
             {
                 return new CategoryDto
                 {
@@ -60,19 +54,21 @@ namespace Ecommerce.Services.Product.Classes
         {
             try
             {
-                var exitingCategory = await _context.Categories.FirstOrDefaultAsync(c => c.Id == categoryId);
-                if (exitingCategory is null)
+                var existingCategory = await _context.Categories.FirstOrDefaultAsync(c => c.Id == categoryId);
+                if (existingCategory is null)
                 {
                     return new CategoryDto
                     {
-                        Message = "This Category is not exist"
+                        Message = "This Category does not exist"
                     };
                 }
-                _context.Categories.Remove(exitingCategory);
+
+                _context.Categories.Remove(existingCategory);
                 await _context.SaveChangesAsync();
+
                 return new CategoryDto
                 {
-                    Message = "Category deleted successfully",
+                    Message = "Category deleted successfully"
                 };
             }
             catch (Exception ex)
@@ -89,24 +85,17 @@ namespace Ecommerce.Services.Product.Classes
             try
             {
                 var categories = await _context.Categories.ToListAsync();
-
-                return categories.Select(c => new CategoryDto
-                {
-                    Id = c.Id,
-                    Name = c.Name,
-                    Description = c.Description,
-                    ImageUrl = c.ImageUrl
-                }).ToList();
+                return _mapper.Map<List<CategoryDto>>(categories);
             }
             catch (Exception ex)
             {
                 return new List<CategoryDto>
-        {
-            new CategoryDto
-            {
-                Message = $"An error occurred: {ex.Message}"
-            }
-        };
+                {
+                    new CategoryDto
+                    {
+                        Message = $"An error occurred: {ex.Message}"
+                    }
+                };
             }
         }
 
@@ -114,23 +103,20 @@ namespace Ecommerce.Services.Product.Classes
         {
             try
             {
-                var exitingCategory = await  _context.Categories.FirstOrDefaultAsync(c => c.Id == categoryId);
-                if (exitingCategory is null)
+                var existingCategory = await _context.Categories.FirstOrDefaultAsync(c => c.Id == categoryId);
+                if (existingCategory is null)
                 {
                     return new CategoryDto
                     {
-                        Message = "This Category is not exist"
+                        Message = "This Category does not exist"
                     };
                 }
-                return new CategoryDto
-                {
-                    Message="This Category is  Found",
-                    Id = exitingCategory.Id,
-                    Name = exitingCategory.Name,
-                    Description = exitingCategory.Description,
-                    ImageUrl = exitingCategory.ImageUrl
-                };
-            }catch(Exception ex)
+
+                var dto = _mapper.Map<CategoryDto>(existingCategory);
+                dto.Message = "This Category is found";
+                return dto;
+            }
+            catch (Exception ex)
             {
                 return new CategoryDto
                 {
@@ -143,23 +129,20 @@ namespace Ecommerce.Services.Product.Classes
         {
             try
             {
-                var exitingCategory = await _context.Categories.FirstOrDefaultAsync(c => c.Name.ToLower() == name.ToLower());
-                if (exitingCategory is null)
+                var existingCategory = await _context.Categories
+                    .FirstOrDefaultAsync(c => c.Name.ToLower() == name.ToLower());
+
+                if (existingCategory is null)
                 {
                     return new CategoryDto
                     {
-                        Message = "This Category is not exist"
+                        Message = "This Category does not exist"
                     };
                 }
-                return new CategoryDto
-                {
-                    Message = "This Category is Found",
-                    Id = exitingCategory.Id,
-                    Name = exitingCategory.Name,
-                    Description = exitingCategory.Description,
-                    ImageUrl = exitingCategory.ImageUrl
-                };
 
+                var dto = _mapper.Map<CategoryDto>(existingCategory);
+                dto.Message = "This Category is found";
+                return dto;
             }
             catch (Exception ex)
             {
@@ -174,39 +157,23 @@ namespace Ecommerce.Services.Product.Classes
         {
             try
             {
-                var exitingCategory = await _context.Categories.FirstOrDefaultAsync(c => c.Id == categoryId);
-                if (exitingCategory is null)
+                var existingCategory = await _context.Categories.FirstOrDefaultAsync(c => c.Id == categoryId);
+                if (existingCategory is null)
                 {
                     return new CategoryDto
                     {
-                        Message = "This Category is not exist"
+                        Message = "This Category does not exist"
                     };
                 }
-                var dtoPropirtes=typeof(UpdateCategoryDto).GetProperties();
-                var modelPropirtes=typeof(CategoryModel).GetProperties();
-                foreach (var prop in dtoPropirtes)
-                {
-                    var dtoValue = prop.GetValue(dto);
-                    if (dtoValue is not null)
-                    {
-                        var modelProp = modelPropirtes.FirstOrDefault(p => p.Name == prop.Name);
-                        if (modelProp is not null)
-                        {
-                            modelProp.SetValue(exitingCategory, dtoValue);
-                        }
-                    }
-                }
-                await _context.SaveChangesAsync();
-                return new CategoryDto
-                {
-                    Message = "Category updated successfully",
-                    Id = exitingCategory.Id,
-                    Name = exitingCategory.Name,
-                    Description = exitingCategory.Description,
-                    ImageUrl = exitingCategory.ImageUrl
-                };
 
-            }catch(Exception ex)
+                _mapper.Map(dto, existingCategory);
+                await _context.SaveChangesAsync();
+
+                var categoryDto = _mapper.Map<CategoryDto>(existingCategory);
+                categoryDto.Message = "Category updated successfully";
+                return categoryDto;
+            }
+            catch (Exception ex)
             {
                 return new CategoryDto
                 {
